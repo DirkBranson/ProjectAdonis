@@ -1,18 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'firebase_options.dart'; // This links your generated Firebase keys
+import 'firebase_options.dart'; 
 import 'analytics_page.dart';
 
+/// [main] is the entry point of the entire application.
+/// It is marked as 'async' because initializing Firebase requires a 
+/// "handshake" with Google's servers before the UI can safely load.
 void main() async {
-  // 1. Initialize the Flutter engine and Firebase bridge
+  // 1. Ensures that the Flutter framework is fully "awoken" before Firebase starts.
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 2. Builds the secure bridge between your local code and the 
+  // Firebase 'Guy of Warwick' backend project.
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
   runApp(const AdonisApp());
 }
 
+/// [AdonisApp] sets the "brand identity" of your application.
+/// It defines the global Indigo theme and specifies which screen 
+/// the user sees first.
 class AdonisApp extends StatelessWidget {
   const AdonisApp({super.key});
 
@@ -21,17 +31,20 @@ class AdonisApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Project Adonis',
-      // We are using a unified theme so the app looks professional
       theme: ThemeData(
         colorSchemeSeed: Colors.indigo,
         useMaterial3: true,
         brightness: Brightness.light,
       ),
+      // The 'home' is the landing page of the app.
       home: const WorkoutSessionPage(),
     );
   }
 }
 
+/// [WorkoutSessionPage] is the core "Logger" engine.
+/// It is a StatefulWidget because it needs to remember your sets 
+/// in real-time as you perform your workout.
 class WorkoutSessionPage extends StatefulWidget {
   const WorkoutSessionPage({super.key});
 
@@ -40,31 +53,35 @@ class WorkoutSessionPage extends StatefulWidget {
 }
 
 class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
-  // --- DATA STORAGE ---
-  // This list holds your sets locally in the phone's RAM until you hit "Submit"
+  // --- DATA STORAGE (Volatile Memory) ---
+  // This list acts as a "Waiting Room." Data is stored here temporarily 
+  // on your phone's RAM and is NOT yet saved to the internet.
   final List<Map<String, dynamic>> _currentSessionSets = [];
   
-  // --- CONTROLLERS ---
-  // Controllers "read" the text typed into the boxes
+  // --- USER INPUT CAPTURE ---
+  // These controllers act like "observers" that watch what you type 
+  // into the Weight and Reps boxes.
   final _weightController = TextEditingController();
   final _repsController = TextEditingController();
   
   String _selectedExercise = 'Bench Press';
-  DateTime? _lastSetTimestamp; // Hidden clock to track your rest periods
+  
+  // A timestamp used to calculate the time elapsed between logging sets.
+  DateTime? _lastSetTimestamp; 
 
-  // --- LOGIC: LOGGING A SET LOCALLY ---
+  /// [_logSet] validates your input and moves the data from the 
+  /// input boxes into the [_currentSessionSets] list.
   void _logSet() {
     final now = DateTime.now();
     
-    // Calculate the difference between this click and the previous one
+    // Logic to calculate rest periods between sets.
     String restTime = "First Set";
     if (_lastSetTimestamp != null) {
       final difference = now.difference(_lastSetTimestamp!);
-      // Format the duration into a readable string
       restTime = "${difference.inMinutes}m ${difference.inSeconds % 60}s";
     }
 
-    // Check if inputs are empty to avoid saving "ghost" data
+    // Guard Clause: Prevents the user from accidentally logging empty data.
     if (_weightController.text.isEmpty || _repsController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter weight and reps!')),
@@ -72,39 +89,39 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
       return;
     }
 
+    // setState() triggers a "Redraw" of the UI so the new set appears in the list.
     setState(() {
-      // Add a "Set Map" to our local list
       _currentSessionSets.add({
         'exercise': _selectedExercise,
         'weight': _weightController.text,
         'reps': _repsController.text,
         'rest_after_prev': restTime,
-        'time_logged': now.toIso8601String(),
+        'time_logged': now.toIso8601String(), // Standard format for databases
       });
       
-      // Reset the timer for the next set
       _lastSetTimestamp = now;
     });
 
-    // Clear the input boxes so you don't have to delete the text manually
+    // Housekeeping: Reset the input boxes for the next set.
     _weightController.clear();
     _repsController.clear();
   }
 
-  // --- LOGIC: SUBMITTING TO FIREBASE ---
+  /// [_submitWorkout] takes the entire "Waiting Room" list and 
+  /// uploads it as a single 'Session' document to Firebase Firestore.
   void _submitWorkout() async {
     if (_currentSessionSets.isEmpty) return;
 
     try {
-      // This sends the entire session as ONE document to the "workouts" collection
+      // Accesses the 'workouts' collection in your cloud warehouse.
       await FirebaseFirestore.instance.collection('workouts').add({
-        'date_label': DateTime.now().toString().split(' ')[0], // e.g., 2024-01-06
+        'date_label': DateTime.now().toString().split(' ')[0], 
         'total_sets': _currentSessionSets.length,
-        'sets': _currentSessionSets, // This is our nested list of maps
-        'timestamp': FieldValue.serverTimestamp(), // Official Google timestamp
+        'sets': _currentSessionSets, // Uploads the nested list of sets
+        'timestamp': FieldValue.serverTimestamp(), // Official Google server-side time
       });
 
-      // Reset the app state for the next workout session
+      // Clear the local state so the app is ready for a new session tomorrow.
       setState(() {
         _currentSessionSets.clear();
         _lastSetTimestamp = null;
@@ -117,13 +134,15 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
         ),
       );
     } catch (e) {
+      // Error handling: Useful for debugging if the internet is down.
       print("Upload failed: $e");
     }
   }
 
+  /// [dispose] is a cleanup method. It prevents "Memory Leaks" by 
+  /// killing the controllers when the user leaves this screen.
   @override
   void dispose() {
-    // Standard cleanup to keep the app fast
     _weightController.dispose();
     _repsController.dispose();
     super.dispose();
@@ -131,32 +150,31 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
 
   @override
   Widget build(BuildContext context) {
+    // The Scaffold is the "Chassis" of your app, providing the top bar and body structure.
     return Scaffold(
-      // The AppBar property of the Scaffold
-    appBar: AppBar(
-      title: const Text('Adonis Session Logger'),
-      backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      
-      // 'actions' is a list of widgets (buttons) on the right side of the bar
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.show_chart), // The graph icon
-          tooltip: 'View Progress Graph',
-          onPressed: () {
-            // This is the "Magic Link" to your new file
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const WorkoutAnalyticsPage(),
-              ),
-            );
-          },
-        ),
-      ],
-    ),
+      appBar: AppBar(
+        title: const Text('Adonis Session Logger'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.show_chart), 
+            tooltip: 'View Progress Graph',
+            onPressed: () {
+              // Navigates the user to the analytics file we created.
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const WorkoutAnalyticsPage(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
       body: Column(
         children: [
-          // TOP SECTION: Input Controls
+          // --- UI COMPONENT: Input Card ---
+          // This card contains the dropdown and text fields for data entry.
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: Card(
@@ -179,7 +197,10 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
                         Expanded(
                           child: TextField(
                             controller: _weightController,
-                            decoration: const InputDecoration(labelText: 'Weight (kg)', border: OutlineInputBorder()),
+                            decoration: const InputDecoration(
+                              labelText: 'Weight (kg)', 
+                              border: OutlineInputBorder()
+                            ),
                             keyboardType: TextInputType.number,
                           ),
                         ),
@@ -187,7 +208,10 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
                         Expanded(
                           child: TextField(
                             controller: _repsController,
-                            decoration: const InputDecoration(labelText: 'Reps', border: OutlineInputBorder()),
+                            decoration: const InputDecoration(
+                              labelText: 'Reps', 
+                              border: OutlineInputBorder()
+                            ),
                             keyboardType: TextInputType.number,
                           ),
                         ),
@@ -208,10 +232,14 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
             ),
           ),
 
-          // MIDDLE SECTION: The Live List
+          // --- UI COMPONENT: The "Waiting Room" List ---
+          // This section displays what is currently in the phone's RAM.
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8.0),
-            child: Text("SESSION DATA (Not yet submitted)", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+            child: Text(
+              "SESSION DATA (Not yet submitted)", 
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)
+            ),
           ),
           
           Expanded(
@@ -229,7 +257,8 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
             ),
           ),
 
-          // BOTTOM SECTION: The Submit Button
+          // --- UI COMPONENT: The Final Submission ---
+          // This button triggers the [ _submitWorkout] logic to talk to Firebase.
           Container(
             padding: const EdgeInsets.all(16),
             child: ElevatedButton(
@@ -238,8 +267,12 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 50),
               ),
+              // Button is disabled (null) if no sets have been logged yet.
               onPressed: _currentSessionSets.isEmpty ? null : _submitWorkout,
-              child: const Text("FINISH & SUBMIT WORKOUT", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              child: const Text(
+                "FINISH & SUBMIT WORKOUT", 
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+              ),
             ),
           )
         ],
