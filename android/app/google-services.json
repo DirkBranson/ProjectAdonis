@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "523313211874",
+    "project_id": "guy-of-warwick",
+    "storage_bucket": "guy-of-warwick.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:523313211874:android:c77e70d7d9f0886a2d71bb",
+        "android_client_info": {
+          "package_name": "com.escaplemos.adonis"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBrBQK8dAx-kDffzK48wGGYsQAtogqAMeA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

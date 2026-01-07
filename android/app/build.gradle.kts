@@ -1,12 +1,13 @@
 plugins {
-    // id("com.escaplemos.adonis")
+    id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("com.google.gms.google-services") // This must be here for Firebase!
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
-    namespace = "com.example.project_adonis"
+    // This is your internal code ID
+    namespace = "com.escaplemos.adonis" 
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,10 +21,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.escaplemos.project_adonis"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // This is your public Store/Firebase ID
+        applicationId = "com.escaplemos.adonis"
+        
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -32,8 +32,6 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
