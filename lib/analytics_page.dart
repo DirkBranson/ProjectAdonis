@@ -36,7 +36,7 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: DropdownButtonFormField<String>(
-              value: _selectedFilter,
+              initialValue: _selectedFilter,
               decoration: const InputDecoration(
                 labelText: "Filter by Exercise",
                 border: OutlineInputBorder(), // Adds a clean border around the filter

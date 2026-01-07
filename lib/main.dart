@@ -184,7 +184,7 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
                 child: Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _selectedExercise,
+                      initialValue: _selectedExercise,
                       decoration: const InputDecoration(labelText: "Select Exercise"),
                       items: ['Bench Press', 'Squat', 'Muscle Up', 'Dips', 'Pull Ups']
                           .map((e) => DropdownMenuItem(value: e, child: Text(e)))
