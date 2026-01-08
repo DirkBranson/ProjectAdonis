@@ -2,12 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import '../models/workout_config.dart';
 
-/// The [WorkoutAnalyticsPage] is a stateful widget that visualizes 
-/// fitness progress data fetched from Firebase Firestore.
-/// 
-/// It uses a [LineChart] to show weight progression over time and
-/// allows users to filter the data by specific exercises.
 class WorkoutAnalyticsPage extends StatefulWidget {
   const WorkoutAnalyticsPage({super.key});
 
@@ -15,137 +11,223 @@ class WorkoutAnalyticsPage extends StatefulWidget {
   State<WorkoutAnalyticsPage> createState() => _WorkoutAnalyticsPageState();
 }
 
+enum ChartMetric { primary, secondary }
+
 class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
-  /// [_selectedFilter] tracks the currently selected exercise.
-  /// This is used to filter out data from other exercises so the graph
-  /// only compares "like-for-like" data points.
-  String _selectedFilter = 'Bench Press';
+  String _selectedCategory = 'Free Weights';
+  String _selectedWorkout = 'Bench Press';
+  ChartMetric _selectedMetric = ChartMetric.primary;
+  
+  // Default fallback weight
+  double _currentBodyWeight = 70.0; 
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLatestBodyWeight();
+  }
+
+  /// Fetches the most recent body weight from the user_metrics collection
+  Future<void> _fetchLatestBodyWeight() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('user_metrics')
+        .orderBy('timestamp', descending: true)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isNotEmpty) {
+      setState(() {
+        _currentBodyWeight = double.tryParse(snapshot.docs.first['value'].toString()) ?? 70.0;
+      });
+    }
+  }
+
+  String _formatDuration(double seconds) {
+    if (seconds <= 0) return "0:00";
+    int mins = (seconds / 60).floor();
+    int secs = (seconds % 60).toInt();
+    return '$mins:${secs.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
+    bool isBodyWeight = _selectedCategory == 'Body Weight';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Progress Tracking'),
-        // Optional: Adding a soft color to distinguish this screen from the logger
+        title: const Text('Performance Analytics'),
         backgroundColor: Colors.indigo.shade50,
       ),
       body: Column(
         children: [
-          // --- SECTION 1: EXERCISE FILTER DROPDOWN ---
-          // We wrap this in Padding to ensure it doesn't touch the screen edges.
+          // --- FILTERS ---
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: DropdownButtonFormField<String>(
-              initialValue: _selectedFilter,
-              decoration: const InputDecoration(
-                labelText: "Filter by Exercise",
-                border: OutlineInputBorder(), // Adds a clean border around the filter
-              ),
-              // List of options available in the dropdown
-              items: ['Bench Press', 'Squat', 'Muscle Up', 'Dips', 'Pull Ups']
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                  .toList(),
-              // When a user selects a new exercise, we update the state
-              onChanged: (val) {
-                setState(() {
-                  _selectedFilter = val!;
-                });
-              },
+            child: Column(
+              children: [
+                DropdownButtonFormField<String>(
+                  value: _selectedCategory,
+                  decoration: const InputDecoration(labelText: "Category", border: OutlineInputBorder()),
+                  items: ['Body Weight', ...WorkoutConfig.categoryList]
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                  onChanged: (val) => setState(() {
+                    _selectedCategory = val!;
+                    if (val != 'Body Weight') {
+                      _selectedWorkout = WorkoutConfig.getWorkouts(val)[0];
+                    }
+                  }),
+                ),
+                if (!isBodyWeight) ...[
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: _selectedWorkout,
+                    decoration: const InputDecoration(labelText: "Workout", border: OutlineInputBorder()),
+                    items: WorkoutConfig.getWorkouts(_selectedCategory)
+                        .map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
+                    onChanged: (val) => setState(() => _selectedWorkout = val!),
+                  ),
+                ],
+              ],
             ),
           ),
 
-          // --- SECTION 2: THE REAL-TIME GRAPH ---
-          // Expanded ensures the graph takes up all remaining vertical space.
+          // --- BODY WEIGHT INDICATOR (For Calisthenics Math) ---
+          if (_selectedCategory == 'Calisthenics')
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+              child: Text(
+                "Math based on last Body Weight: ${_currentBodyWeight}kg",
+                style: TextStyle(color: Colors.blue.shade800, fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+            ),
+
+          // --- CHART ---
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              // .snapshots() creates a "live wire" to the 'workouts' collection.
-              // We order by timestamp so the line connects dots in the right order.
               stream: FirebaseFirestore.instance
-                  .collection('workouts')
+                  .collection(isBodyWeight ? 'user_metrics' : 'workouts')
                   .orderBy('timestamp')
                   .snapshots(),
               builder: (context, snapshot) {
-                // Scenario A: Still waiting for the first signal from the database
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+                if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
-                // Scenario B: We have data, now we must transform it for the graph
                 List<FlSpot> spots = [];
-                
-                // We loop through every "Workout Session" document in Firestore
+                double minX = double.maxFinite;
+                double maxX = -double.maxFinite;
+
                 for (var doc in snapshot.data!.docs) {
-                  // Cast the generic document data into a usable Map
                   var data = doc.data() as Map<String, dynamic>;
-                  // Extract the list of sets; defaults to an empty list if null
-                  List sets = data['sets'] ?? [];
-                  
-                  // Now we look inside the workout for specific sets matching our filter
-                  for (var set in sets) {
-                    if (set['exercise'] == _selectedFilter) {
-                      // 1. Convert the ISO string back into a Dart DateTime object
-                      DateTime date = DateTime.parse(set['time_logged']);
-                      // 2. Safely parse the weight string into a double
-                      double weight = double.tryParse(set['weight'].toString()) ?? 0;
-                      
-                      // 3. Map the data: X is the date (as a number), Y is the weight.
-                      // We use millisecondsSinceEpoch because graphs only understand numbers.
-                      spots.add(FlSpot(
-                        date.millisecondsSinceEpoch.toDouble(), 
-                        weight
-                      ));
+                  if (data['timestamp'] == null) continue;
+
+                  DateTime date = (data['timestamp'] as Timestamp).toDate();
+                  double x = date.millisecondsSinceEpoch.toDouble();
+
+                  if (isBodyWeight) {
+                    double weight = double.tryParse(data['value'].toString()) ?? 0;
+                    if (weight > 0) spots.add(FlSpot(x, weight));
+                  } else {
+                    List sets = data['sets'] ?? [];
+                    for (var set in sets) {
+                      if (set['category'] == _selectedCategory && set['workout'] == _selectedWorkout) {
+                        double v1 = double.tryParse(set['val1']?.toString() ?? '0') ?? 0;
+                        double v2 = double.tryParse(set['val2']?.toString() ?? '0') ?? 0;
+
+                        double yValue = 0;
+                        
+                        // Use Body Weight for Calisthenics Logic
+                        double weightToUse = (_selectedCategory == 'Calisthenics') 
+                            ? (v1 + _currentBodyWeight) 
+                            : v1;
+
+                        switch (_selectedCategory) {
+                          case 'Free Weights':
+                          case 'Calisthenics':
+                            // Primary: Total Volume | Secondary: Max Weight (Total Load)
+                            yValue = (_selectedMetric == ChartMetric.primary) ? (weightToUse * v2) : weightToUse;
+                            break;
+                          case 'Track':
+                          case 'Distance Running':
+                          case 'Eccentrics':
+                            yValue = (_selectedMetric == ChartMetric.primary) ? v1 : v2;
+                            break;
+                          case 'Isometrics':
+                          case 'Flexibility':
+                            yValue = v1;
+                            break;
+                        }
+
+                        if (yValue > 0) spots.add(FlSpot(x, yValue));
+                      }
                     }
+                  }
+                  if (spots.isNotEmpty) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
                   }
                 }
 
-                // Scenario C: The collection exists, but no sets match the current filter
-                if (spots.isEmpty) {
-                  return Center(
-                    child: Text("No records for $_selectedFilter yet."),
-                  );
-                }
+                if (spots.isEmpty) return Center(child: Text("No records for $_selectedWorkout"));
+                if (minX == maxX) { maxX += 86400000; minX -= 86400000; }
 
-                // Scenario D: Success! We have points to plot.
                 return Padding(
-                  padding: const EdgeInsets.only(right: 20, top: 20, bottom: 20),
+                  padding: const EdgeInsets.fromLTRB(10, 20, 30, 10),
                   child: LineChart(
                     LineChartData(
+                      minX: minX, maxX: maxX,
                       lineBarsData: [
                         LineChartBarData(
                           spots: spots,
-                          isCurved: false, // Straight lines make strength plateaus easier to spot
-                          color: Colors.indigo,
+                          isCurved: true,
+                          color: isBodyWeight ? Colors.orange : Colors.indigo,
                           barWidth: 4,
-                          // Shows a small circle on every recorded session
                           dotData: const FlDotData(show: true),
-                          // Optional: Adds a subtle blue glow under the line
                           belowBarData: BarAreaData(
                             show: true, 
-                            color: Colors.indigo.withOpacity(0.1)
+                            color: (isBodyWeight ? Colors.orange : Colors.indigo).withOpacity(0.1)
                           ),
                         ),
                       ],
-                      // Titles define the labels on the X and Y axis
                       titlesData: FlTitlesData(
                         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                         rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 50,
+                            getTitlesWidget: (value, meta) {
+                              bool isTimeMetric = (_selectedCategory == 'Track' && _selectedMetric == ChartMetric.secondary) ||
+                                                 (_selectedCategory == 'Isometrics') ||
+                                                 (_selectedCategory == 'Flexibility' && _selectedMetric == ChartMetric.primary) ||
+                                                 (_selectedCategory == 'Eccentrics' && _selectedMetric == ChartMetric.primary);
+                              
+                              return SideTitleWidget(
+                                meta: meta,
+                                child: Text(
+                                  isTimeMetric ? _formatDuration(value) : value.toInt().toString(),
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                              );
+                            }
+                          )
+                        ),
                         bottomTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
-                            reservedSize: 30, // Space for the date labels
+                            reservedSize: 30,
+                            interval: (maxX - minX) / 4,
                             getTitlesWidget: (value, meta) {
-                              // We turn the large millisecond number back into a Date
                               final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
-                              // Format it to "Jan 06" so it fits on screen
-                              return Text(
-                                DateFormat('MMM dd').format(date), 
-                                style: const TextStyle(fontSize: 10, color: Colors.grey)
+                              return SideTitleWidget(
+                                meta: meta,
+                                child: Text(DateFormat('MMM dd').format(date), style: const TextStyle(fontSize: 10)),
                               );
                             },
                           ),
                         ),
                       ),
-                      // Removes the default grid lines for a cleaner "Adonis" look
                       gridData: const FlGridData(show: true, drawVerticalLine: false),
                       borderData: FlBorderData(show: false),
                     ),
@@ -154,6 +236,20 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
               },
             ),
           ),
+          
+          // --- METRIC TOGGLE ---
+          if (!isBodyWeight)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SegmentedButton<ChartMetric>(
+                segments: const [
+                  ButtonSegment(value: ChartMetric.primary, label: Text('Primary Metric')),
+                  ButtonSegment(value: ChartMetric.secondary, label: Text('Secondary Metric')),
+                ],
+                selected: {_selectedMetric},
+                onSelectionChanged: (val) => setState(() => _selectedMetric = val.first),
+              ),
+            ),
         ],
       ),
     );
