@@ -1,0 +1,125 @@
+okay, im going to mix things up a bit.
+
+
+
+i realise that the drop down isn't going to get a bit long.
+
+
+
+could we add another drop down at the top which is for (Free Weights, Concentrics, Isometrics, Eccentrics, Mobility, Aerobic and Anaerobic)
+
+
+
+this are replacing the four categories we had previously.
+
+
+
+in each category we will have our workouts and each workout in a category will share the same reportable metrics.
+
+
+
+Free Weights
+
+Workouts:
+Bench Press
+Bicep Curl
+Dead Lift
+RDL
+Squat
+Overhead Press
+Single Row
+Barbell Row
+
+Metrics:
+Weight (kg)
+Repetitions (number)
+
+Calisthenics
+
+Workouts:
+Muscle Ups
+Pull Ups
+Chin Ups
+Dips
+Pistol Squats
+Nordic Curls
+Ring Rows
+Ring Press Ups
+Archer Press Ups
+Press Ups
+
+
+Metrics:
+Assistance (number, default to 0)
+Weight (kg)
+Repetitions (number)
+
+Isometrics
+
+Workouts:
+Handstand
+Hollow Body
+L-Sit
+Back Lever
+Front Lever
+Planche
+Frog Stand
+
+Metrics:
+Time (s)
+
+Eccentrics
+
+Chin Ups
+Pull Ups
+Muscle Ups
+Pistol Squats
+Dips
+
+Time (s)
+Repetitions (number)
+
+Distance Running
+
+Workouts:
+Run
+
+Metrics:
+Distance (miles)
+Pace (mins/mile)
+
+Track
+
+Workouts:
+3k
+1500m
+800m
+400m
+200m
+100m
+
+Metrics:
+Distance (m)
+Time (s)
+
+Flexibility
+
+Workouts:
+Box Splits
+Front Splits Right
+Front Splits Left
+Pancake
+
+Metrics:
+Time (s)
+Stretch (cm)
+
+
+Okay! That's great
+Currently, we have a log set feature that also records the rest times. This works well for almost all of these workout categories, but please remove it for Distance Running.
+Thanks
+
+
+
+
+

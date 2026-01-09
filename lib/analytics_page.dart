@@ -18,7 +18,6 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
   String _selectedWorkout = 'Bench Press';
   ChartMetric _selectedMetric = ChartMetric.primary;
   
-  // Default fallback weight
   double _currentBodyWeight = 70.0; 
 
   @override
@@ -27,7 +26,6 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
     _fetchLatestBodyWeight();
   }
 
-  /// Fetches the most recent body weight from the user_metrics collection
   Future<void> _fetchLatestBodyWeight() async {
     final snapshot = await FirebaseFirestore.instance
         .collection('user_metrics')
@@ -60,7 +58,6 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
       ),
       body: Column(
         children: [
-          // --- FILTERS ---
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -91,7 +88,6 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
             ),
           ),
 
-          // --- BODY WEIGHT INDICATOR (For Calisthenics Math) ---
           if (_selectedCategory == 'Calisthenics')
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -103,7 +99,6 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
               ),
             ),
 
-          // --- CHART ---
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -136,17 +131,19 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                         double v2 = double.tryParse(set['val2']?.toString() ?? '0') ?? 0;
 
                         double yValue = 0;
-                        
-                        // Use Body Weight for Calisthenics Logic
                         double weightToUse = (_selectedCategory == 'Calisthenics') 
                             ? (v1 + _currentBodyWeight) 
                             : v1;
 
+                        // --- INTEGRATED LOGIC START ---
                         switch (_selectedCategory) {
                           case 'Free Weights':
+                          case 'Machines': // Added Machines
                           case 'Calisthenics':
-                            // Primary: Total Volume | Secondary: Max Weight (Total Load)
                             yValue = (_selectedMetric == ChartMetric.primary) ? (weightToUse * v2) : weightToUse;
+                            break;
+                          case 'Sports': // Added Sports
+                            yValue = (_selectedMetric == ChartMetric.primary) ? v1 : v2;
                             break;
                           case 'Track':
                           case 'Distance Running':
@@ -158,6 +155,7 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                             yValue = v1;
                             break;
                         }
+                        // --- INTEGRATED LOGIC END ---
 
                         if (yValue > 0) spots.add(FlSpot(x, yValue));
                       }
@@ -198,6 +196,7 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                             showTitles: true,
                             reservedSize: 50,
                             getTitlesWidget: (value, meta) {
+                              // Added Sports and Machines to the "NOT Time" logic
                               bool isTimeMetric = (_selectedCategory == 'Track' && _selectedMetric == ChartMetric.secondary) ||
                                                  (_selectedCategory == 'Isometrics') ||
                                                  (_selectedCategory == 'Flexibility' && _selectedMetric == ChartMetric.primary) ||
@@ -237,7 +236,6 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
             ),
           ),
           
-          // --- METRIC TOGGLE ---
           if (!isBodyWeight)
             Padding(
               padding: const EdgeInsets.all(16.0),

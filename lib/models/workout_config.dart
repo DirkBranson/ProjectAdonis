@@ -10,10 +10,23 @@ class WorkoutConfig {
         'Overhead Press',
         'Single Row',
         'Barbell Row',
+        'Vertical Arm Raise',
+        'Horizontal Arm Raise',
+        'Flies',
       ],
       'fields': ['Weight (kg)', 'Reps'],
     },
-    // Inside WorkoutConfig class
+    'Machines': {
+      'workouts': [
+        'Leg Press',
+        'Lat Pulldown',
+        'Chest Press',
+        'Cable Flies',
+        'Tricep Extensions',
+        'Hamstring Curl',
+      ],
+      'fields': ['Weight (kg)', 'Reps'],
+    },
     'Calisthenics': {
       'workouts': [
         'Muscle Ups',
@@ -27,7 +40,7 @@ class WorkoutConfig {
         'Archer Press Ups',
         'Press Ups',
       ],
-      'fields': ['Weight (kg)', 'Reps'], // Removed 'Assistance'
+      'fields': ['Weight (kg)', 'Reps'],
     },
     'Isometrics': {
       'workouts': [
@@ -68,12 +81,21 @@ class WorkoutConfig {
       ],
       'fields': ['Time (s)', 'Stretch (cm)'],
     },
+    'Sports': {
+      'workouts': [
+        'Tag Rugby', 
+        'Tennis'
+      ],
+      'fields': ['My Score', 'Team Score'],
+    },
   };
 
-  // Helper to get categories as a simple list
   static List<String> get categoryList => categories.keys.toList();
 
-  // Helper to get workouts for a specific category
   static List<String> getWorkouts(String category) =>
       List<String>.from(categories[category]?['workouts'] ?? []);
+
+  // Added this helper back in case your UI needs it to generate text fields
+  static List<String> getFields(String category) =>
+      List<String>.from(categories[category]?['fields'] ?? []);
 }
