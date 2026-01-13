@@ -3,16 +3,23 @@ class WorkoutConfig {
     'Free Weights': {
       'workouts': [
         'Bench Press',
-        'Bicep Curl',
+        'Bicep Curl R',
+        'Bicep Curl L',
+        'Tricep Extension R',
+        'Tricep Extension L',
         'Dead Lift',
         'RDL',
         'Squat',
-        'Overhead Press',
-        'Single Row',
-        'Barbell Row',
+        'Overhead Press 2H',
+        'Overhead Press 1H',
+        'Single Row R',
+        'Single Row L',
+        'Bentover Row',
         'Vertical Arm Raise',
         'Horizontal Arm Raise',
         'Flies',
+        'Lunges',
+        'Calf Raises',
       ],
       'fields': ['Weight (kg)', 'Reps'],
     },
@@ -39,6 +46,9 @@ class WorkoutConfig {
         'Ring Press Ups',
         'Archer Press Ups',
         'Press Ups',
+        'Pike Push Ups',
+        'Squats',
+
       ],
       'fields': ['Weight (kg)', 'Reps'],
     },
@@ -82,10 +92,7 @@ class WorkoutConfig {
       'fields': ['Time (s)', 'Stretch (cm)'],
     },
     'Sports': {
-      'workouts': [
-        'Tag Rugby', 
-        'Tennis'
-      ],
+      'workouts': ['Tag Rugby', 'Tennis'],
       'fields': ['My Score', 'Team Score'],
     },
   };
