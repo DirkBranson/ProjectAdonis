@@ -48,7 +48,6 @@ class WorkoutConfig {
         'Press Ups',
         'Pike Push Ups',
         'Squats',
-
       ],
       'fields': ['Weight (kg)', 'Reps'],
     },

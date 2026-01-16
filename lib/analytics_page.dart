@@ -18,7 +18,7 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
   String _selectedWorkout = 'Bench Press';
   ChartMetric _selectedMetric = ChartMetric.primary;
 
-  double _currentBodyWeight = 70.0;
+  double _currentBodyWeight = 75.0;
 
   @override
   void initState() {
@@ -36,7 +36,7 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
     if (snapshot.docs.isNotEmpty) {
       setState(() {
         _currentBodyWeight =
-            double.tryParse(snapshot.docs.first['value'].toString()) ?? 70.0;
+            double.tryParse(snapshot.docs.first['value'].toString()) ?? 75.0;
       });
     }
   }
@@ -74,7 +74,9 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                       .toList(),
                   onChanged: (val) => setState(() {
                     _selectedCategory = val!;
-                    if (val != 'Body Weight') {
+                    if (val == 'Body Weight') {
+                      _selectedMetric = ChartMetric.primary;
+                    } else {
                       _selectedWorkout = WorkoutConfig.getWorkouts(val)[0];
                     }
                   }),
@@ -122,10 +124,8 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                   .orderBy('timestamp')
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.hasError)
-                  return Center(child: Text("Error: ${snapshot.error}"));
-                if (!snapshot.hasData)
-                  return const Center(child: CircularProgressIndicator());
+                if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
                 List<FlSpot> spots = [];
                 double minX = double.maxFinite;
@@ -139,70 +139,77 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                   double x = date.millisecondsSinceEpoch.toDouble();
 
                   if (isBodyWeight) {
-                    double weight =
-                        double.tryParse(data['value'].toString()) ?? 0;
-                    if (weight > 0) spots.add(FlSpot(x, weight));
+                    double weight = double.tryParse(data['value'].toString()) ?? 0;
+                    if (weight > 0) {
+                      spots.add(FlSpot(x, weight));
+                      if (x < minX) minX = x;
+                      if (x > maxX) maxX = x;
+                    }
                   } else {
                     List sets = data['sets'] ?? [];
+                    double sessionPrimaryMetric = 0;
+                    double sessionSecondaryMetric = 0;
+                    bool hasData = false;
+
                     for (var set in sets) {
-                      if (set['category'] == _selectedCategory &&
-                          set['workout'] == _selectedWorkout) {
-                        double v1 =
-                            double.tryParse(set['val1']?.toString() ?? '0') ??
-                            0;
-                        double v2 =
-                            double.tryParse(set['val2']?.toString() ?? '0') ??
-                            0;
+                      if (set['category'] == _selectedCategory && set['workout'] == _selectedWorkout) {
+                        hasData = true;
+                        double v1 = double.tryParse(set['val1']?.toString() ?? '0') ?? 0;
+                        double v2 = double.tryParse(set['val2']?.toString() ?? '0') ?? 0;
+                        double weightAtTime = double.tryParse(set['body_weight_at_time']?.toString() ?? '') 
+                            ?? _currentBodyWeight;
 
-                        double yValue = 0;
-                        double weightToUse =
-                            (_selectedCategory == 'Calisthenics')
-                            ? (v1 + _currentBodyWeight)
-                            : v1;
-
-                        // --- INTEGRATED LOGIC START ---
                         switch (_selectedCategory) {
                           case 'Free Weights':
-                          case 'Machines': // Added Machines
+                          case 'Machines':
                           case 'Calisthenics':
-                            yValue = (_selectedMetric == ChartMetric.primary)
-                                ? (weightToUse * v2)
-                                : weightToUse;
-                            break;
-                          case 'Sports': // Added Sports
-                            yValue = (_selectedMetric == ChartMetric.primary)
-                                ? v1
-                                : v2;
-                            break;
-                          case 'Track':
-                          case 'Distance Running':
                           case 'Eccentrics':
-                            yValue = (_selectedMetric == ChartMetric.primary)
-                                ? v1
-                                : v2;
+                            double effectiveWeight = (_selectedCategory == 'Calisthenics') ? (v1 + weightAtTime) : v1;
+                            sessionPrimaryMetric += (effectiveWeight * v2); 
+                            if (effectiveWeight > sessionSecondaryMetric) sessionSecondaryMetric = effectiveWeight;
                             break;
+
+                          case 'Distance Running':
+                          case 'Track':
+                            double qualityScore = (v2 > 0) ? (v1 / v2) * 100 : 0; 
+                            sessionPrimaryMetric += qualityScore; 
+                            sessionSecondaryMetric += v1; 
+                            break;
+
                           case 'Isometrics':
                           case 'Flexibility':
-                            yValue = v1;
+                            sessionPrimaryMetric += v1; 
+                            if (v1 > sessionSecondaryMetric) sessionSecondaryMetric = v1;
                             break;
-                        }
-                        // --- INTEGRATED LOGIC END ---
 
-                        if (yValue > 0) spots.add(FlSpot(x, yValue));
+                          case 'Sports':
+                            sessionPrimaryMetric += v1; 
+                            sessionSecondaryMetric += v2; 
+                            break;
+
+                          default:
+                            sessionPrimaryMetric += v1;
+                        }
+                      }
+                    }
+
+                    if (hasData) {
+                      double yValue = (_selectedMetric == ChartMetric.primary) 
+                          ? sessionPrimaryMetric 
+                          : sessionSecondaryMetric;
+                      
+                      if (yValue > 0 && yValue.isFinite) {
+                        spots.add(FlSpot(x, yValue));
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
                       }
                     }
                   }
-                  if (spots.isNotEmpty) {
-                    if (x < minX) minX = x;
-                    if (x > maxX) maxX = x;
-                  }
                 }
 
-                if (spots.isEmpty)
-                  return Center(
-                    child: Text("No records for $_selectedWorkout"),
-                  );
-                if (minX == maxX) {
+                if (spots.isEmpty) return Center(child: Text("No records for $_selectedWorkout"));
+                
+                if (minX == maxX) { 
                   maxX += 86400000;
                   minX -= 86400000;
                 }
@@ -222,43 +229,46 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                           dotData: const FlDotData(show: true),
                           belowBarData: BarAreaData(
                             show: true,
-                            color:
-                                (isBodyWeight ? Colors.orange : Colors.indigo)
-                                    .withOpacity(0.1),
+                            color: (isBodyWeight ? Colors.orange : Colors.indigo).withOpacity(0.1),
                           ),
                         ),
                       ],
                       titlesData: FlTitlesData(
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                         leftTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
                             reservedSize: 50,
+                            // Ensure at least some spacing between labels
+                            interval: null, 
                             getTitlesWidget: (value, meta) {
-                              // Added Sports and Machines to the "NOT Time" logic
-                              bool isTimeMetric =
-                                  (_selectedCategory == 'Track' &&
-                                      _selectedMetric ==
-                                          ChartMetric.secondary) ||
+                              bool isTimeMetric = (_selectedCategory == 'Track' && _selectedMetric == ChartMetric.secondary) ||
                                   (_selectedCategory == 'Isometrics') ||
-                                  (_selectedCategory == 'Flexibility' &&
-                                      _selectedMetric == ChartMetric.primary) ||
-                                  (_selectedCategory == 'Eccentrics' &&
-                                      _selectedMetric == ChartMetric.primary);
+                                  (_selectedCategory == 'Flexibility' && _selectedMetric == ChartMetric.primary) ||
+                                  (_selectedCategory == 'Eccentrics' && _selectedMetric == ChartMetric.primary);
+
+                              if (isTimeMetric) {
+                                return SideTitleWidget(
+                                  meta: meta,
+                                  child: Text(_formatDuration(value), style: const TextStyle(fontSize: 10)),
+                                );
+                              }
+
+                              // Precision Logic for non-time metrics
+                              String label;
+                              double range = meta.max - meta.min;
+                              
+                              // If range is tight (like body weight), show 1 decimal point
+                              if (range < 10 && range > 0) {
+                                label = value.toStringAsFixed(1);
+                              } else {
+                                label = value.toInt().toString();
+                              }
 
                               return SideTitleWidget(
                                 meta: meta,
-                                child: Text(
-                                  isTimeMetric
-                                      ? _formatDuration(value)
-                                      : value.toInt().toString(),
-                                  style: const TextStyle(fontSize: 10),
-                                ),
+                                child: Text(label, style: const TextStyle(fontSize: 10)),
                               );
                             },
                           ),
@@ -269,24 +279,16 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                             reservedSize: 30,
                             interval: (maxX - minX) / 4,
                             getTitlesWidget: (value, meta) {
-                              final date = DateTime.fromMillisecondsSinceEpoch(
-                                value.toInt(),
-                              );
+                              final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
                               return SideTitleWidget(
                                 meta: meta,
-                                child: Text(
-                                  DateFormat('MMM dd').format(date),
-                                  style: const TextStyle(fontSize: 10),
-                                ),
+                                child: Text(DateFormat('MMM dd').format(date), style: const TextStyle(fontSize: 10)),
                               );
                             },
                           ),
                         ),
                       ),
-                      gridData: const FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                      ),
+                      gridData: const FlGridData(show: true, drawVerticalLine: false),
                       borderData: FlBorderData(show: false),
                     ),
                   ),
@@ -300,18 +302,11 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
               padding: const EdgeInsets.all(16.0),
               child: SegmentedButton<ChartMetric>(
                 segments: const [
-                  ButtonSegment(
-                    value: ChartMetric.primary,
-                    label: Text('Primary Metric'),
-                  ),
-                  ButtonSegment(
-                    value: ChartMetric.secondary,
-                    label: Text('Secondary Metric'),
-                  ),
+                  ButtonSegment(value: ChartMetric.primary, label: Text('Total Volume')),
+                  ButtonSegment(value: ChartMetric.secondary, label: Text('Max Intensity')),
                 ],
                 selected: {_selectedMetric},
-                onSelectionChanged: (val) =>
-                    setState(() => _selectedMetric = val.first),
+                onSelectionChanged: (val) => setState(() => _selectedMetric = val.first),
               ),
             ),
         ],
