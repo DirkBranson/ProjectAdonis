@@ -168,25 +168,21 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                             sessionPrimaryMetric += (effectiveWeight * v2); 
                             if (effectiveWeight > sessionSecondaryMetric) sessionSecondaryMetric = effectiveWeight;
                             break;
-
                           case 'Distance Running':
                           case 'Track':
                             double qualityScore = (v2 > 0) ? (v1 / v2) * 100 : 0; 
                             sessionPrimaryMetric += qualityScore; 
                             sessionSecondaryMetric += v1; 
                             break;
-
                           case 'Isometrics':
                           case 'Flexibility':
                             sessionPrimaryMetric += v1; 
                             if (v1 > sessionSecondaryMetric) sessionSecondaryMetric = v1;
                             break;
-
                           case 'Sports':
                             sessionPrimaryMetric += v1; 
                             sessionSecondaryMetric += v2; 
                             break;
-
                           default:
                             sessionPrimaryMetric += v1;
                         }
@@ -197,7 +193,6 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                       double yValue = (_selectedMetric == ChartMetric.primary) 
                           ? sessionPrimaryMetric 
                           : sessionSecondaryMetric;
-                      
                       if (yValue > 0 && yValue.isFinite) {
                         spots.add(FlSpot(x, yValue));
                         if (x < minX) minX = x;
@@ -208,10 +203,31 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                 }
 
                 if (spots.isEmpty) return Center(child: Text("No records for $_selectedWorkout"));
-                
-                if (minX == maxX) { 
-                  maxX += 86400000;
-                  minX -= 86400000;
+                if (minX == maxX) { maxX += 86400000; minX -= 86400000; }
+
+                // --- CALCULATION LOGIC FOR TREND LINES ---
+                List<FlSpot> rollingAverageSpots = [];
+                List<FlSpot> weeklySaturdaySpots = [];
+
+                if (isBodyWeight && spots.isNotEmpty) {
+                  spots.sort((a, b) => a.x.compareTo(b.x));
+                  for (int i = 0; i < spots.length; i++) {
+                    double sum = 0;
+                    int count = 0;
+                    DateTime currentSpotDate = DateTime.fromMillisecondsSinceEpoch(spots[i].x.toInt());
+                    for (int j = i; j >= 0; j--) {
+                      DateTime lookbackDate = DateTime.fromMillisecondsSinceEpoch(spots[j].x.toInt());
+                      if (currentSpotDate.difference(lookbackDate).inDays <= 7) {
+                        sum += spots[j].y;
+                        count++;
+                      } else { break; }
+                    }
+                    double avg = sum / count;
+                    rollingAverageSpots.add(FlSpot(spots[i].x, avg));
+                    if (currentSpotDate.weekday == DateTime.saturday) {
+                      weeklySaturdaySpots.add(FlSpot(spots[i].x, avg));
+                    }
+                  }
                 }
 
                 return Padding(
@@ -221,17 +237,41 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                       minX: minX,
                       maxX: maxX,
                       lineBarsData: [
+                        // 1. PRIMARY DATA LINE
                         LineChartBarData(
                           spots: spots,
                           isCurved: true,
-                          color: isBodyWeight ? Colors.orange : Colors.indigo,
-                          barWidth: 4,
-                          dotData: const FlDotData(show: true),
-                          belowBarData: BarAreaData(
-                            show: true,
-                            color: (isBodyWeight ? Colors.orange : Colors.indigo).withOpacity(0.1),
-                          ),
+                          color: isBodyWeight ? Colors.orange.withOpacity(0.3) : Colors.indigo,
+                          barWidth: isBodyWeight ? 2 : 4,
+                          dotData: FlDotData(show: !isBodyWeight), // Hide daily dots for weight
+                          belowBarData: BarAreaData(show: !isBodyWeight, color: Colors.indigo.withOpacity(0.1)),
                         ),
+                        // 2. ROLLING AVERAGE LINE (Dashed Blue)
+                        if (isBodyWeight)
+                          LineChartBarData(
+                            spots: rollingAverageSpots,
+                            isCurved: true,
+                            color: Colors.blueAccent,
+                            barWidth: 3,
+                            dashArray: [5, 5],
+                            dotData: const FlDotData(show: false),
+                          ),
+                        // 3. WEEKLY SNAPSHOT POINTS (Green Dots)
+                        if (isBodyWeight)
+                          LineChartBarData(
+                            spots: weeklySaturdaySpots,
+                            color: Colors.green,
+                            barWidth: 0, // Points only
+                            dotData: FlDotData(
+                              show: true,
+                              getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                                radius: 5,
+                                color: Colors.green,
+                                strokeWidth: 2,
+                                strokeColor: Colors.white,
+                              ),
+                            ),
+                          ),
                       ],
                       titlesData: FlTitlesData(
                         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -240,36 +280,14 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                           sideTitles: SideTitles(
                             showTitles: true,
                             reservedSize: 50,
-                            // Ensure at least some spacing between labels
-                            interval: null, 
                             getTitlesWidget: (value, meta) {
                               bool isTimeMetric = (_selectedCategory == 'Track' && _selectedMetric == ChartMetric.secondary) ||
                                   (_selectedCategory == 'Isometrics') ||
                                   (_selectedCategory == 'Flexibility' && _selectedMetric == ChartMetric.primary) ||
                                   (_selectedCategory == 'Eccentrics' && _selectedMetric == ChartMetric.primary);
-
-                              if (isTimeMetric) {
-                                return SideTitleWidget(
-                                  meta: meta,
-                                  child: Text(_formatDuration(value), style: const TextStyle(fontSize: 10)),
-                                );
-                              }
-
-                              // Precision Logic for non-time metrics
-                              String label;
-                              double range = meta.max - meta.min;
-                              
-                              // If range is tight (like body weight), show 1 decimal point
-                              if (range < 10 && range > 0) {
-                                label = value.toStringAsFixed(1);
-                              } else {
-                                label = value.toInt().toString();
-                              }
-
-                              return SideTitleWidget(
-                                meta: meta,
-                                child: Text(label, style: const TextStyle(fontSize: 10)),
-                              );
+                              if (isTimeMetric) return SideTitleWidget(meta: meta, child: Text(_formatDuration(value), style: const TextStyle(fontSize: 10)));
+                              String label = (meta.max - meta.min < 10 && meta.max - meta.min > 0) ? value.toStringAsFixed(1) : value.toInt().toString();
+                              return SideTitleWidget(meta: meta, child: Text(label, style: const TextStyle(fontSize: 10)));
                             },
                           ),
                         ),
@@ -280,10 +298,7 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
                             interval: (maxX - minX) / 4,
                             getTitlesWidget: (value, meta) {
                               final date = DateTime.fromMillisecondsSinceEpoch(value.toInt());
-                              return SideTitleWidget(
-                                meta: meta,
-                                child: Text(DateFormat('MMM dd').format(date), style: const TextStyle(fontSize: 10)),
-                              );
+                              return SideTitleWidget(meta: meta, child: Text(DateFormat('MMM dd').format(date), style: const TextStyle(fontSize: 10)));
                             },
                           ),
                         ),
@@ -296,7 +311,6 @@ class _WorkoutAnalyticsPageState extends State<WorkoutAnalyticsPage> {
               },
             ),
           ),
-
           if (!isBodyWeight)
             Padding(
               padding: const EdgeInsets.all(16.0),
