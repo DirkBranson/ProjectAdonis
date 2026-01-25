@@ -29,6 +29,27 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
     _field3Controller.clear();
   }
 
+  // 1. Add this function to your _WorkoutSessionPageState class
+  void _removeSet(int index) {
+    setState(() {
+      _currentSessionSets.removeAt(index);
+      
+      // If we remove everything, reset the timestamp so the next set 
+      // is marked as "First Set" again.
+      if (_currentSessionSets.isEmpty) {
+        _lastSetTimestamp = null;
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Set removed from session'),
+        duration: Duration(milliseconds: 700),
+        backgroundColor: Colors.redAccent,
+      ),
+    );
+  }
+
   void _logSet() {
     final now = DateTime.now();
 
@@ -261,16 +282,28 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
     );
   }
 
-  Widget _buildSessionList() {
+Widget _buildSessionList() {
+    // Reverse the list so the newest sets appear at the top
+    final reversedSets = _currentSessionSets.reversed.toList();
+    
     return ListView.builder(
-      itemCount: _currentSessionSets.length,
+      itemCount: reversedSets.length,
       itemBuilder: (context, index) {
-        final item = _currentSessionSets[index];
+        final item = reversedSets[index];
+        // Calculate the original index for removal
+        final originalIndex = _currentSessionSets.length - 1 - index;
+
         return ListTile(
-          leading: CircleAvatar(child: Text("${index + 1}")),
+          leading: CircleAvatar(
+            backgroundColor: Colors.indigo.shade100,
+            child: Text("${originalIndex + 1}"),
+          ),
           title: Text("${item['workout']} (${item['category']})"),
-          subtitle: Text("Rest: ${item['rest_time']}"),
-          trailing: const Icon(Icons.check, color: Colors.green),
+          subtitle: Text("V1: ${item['val1']} | V2: ${item['val2']} | Rest: ${item['rest_time']}"),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            onPressed: () => _removeSet(originalIndex),
+          ),
         );
       },
     );
